@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ERP Intelligence — AI Query Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor" opacity="0.9"/>
+          <rect x="14" y="3" width="7" height="7" rx="1.5" fill="currentColor" opacity="0.6"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5" fill="currentColor" opacity="0.6"/>
+          <rect x="14" y="14" width="7" height="7" rx="1.5" fill="currentColor" opacity="0.3"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <span class="logo-main">ERP Intelligence</span>
+        
+      </div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill" id="statusPill">
+      <span class="status-dot"></span>
+      <span class="status-label">Connecting...</span>
+    </div>
+    <button class="btn-icon" id="schemaBtn" title="View Schema">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <line x1="10" y1="9" x2="8" y2="9"/>
+      </svg>
+    </button>
+    <button class="btn-icon" id="clearBtn" title="Clear Chat">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- ===== MAIN LAYOUT ===== -->
+<div class="main-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Try asking</h3>
+      <div class="sample-questions" id="sampleQuestions">
+        {% for q in sample_questions %}
+        <button class="sample-q" data-question="{{ q }}">{{ q }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Modules</h3>
+      <div class="module-pills">
+        <span class="module-pill hr">HR</span>
+        <span class="module-pill sales">Sales</span>
+        <span class="module-pill finance">Finance</span>
+        <span class="module-pill inventory">Inventory</span>
+        <span class="module-pill procurement">Procurement</span>
+        <span class="module-pill crm">CRM</span>
+      </div>
+    </div>
+
+    <div class="sidebar-stats" id="sidebarStats">
+      <div class="stat-item">
+        <span class="stat-value" id="statQueries">0</span>
+        <span class="stat-label">Queries</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value" id="statRows">0</span>
+        <span class="stat-label">Rows Fetched</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CHAT AREA -->
+  <main class="chat-container">
+    <div class="chat-messages" id="chatMessages">
+      <!-- Welcome message -->
+      <div class="message bot-message welcome-message">
+        <div class="message-avatar bot-avatar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+          </svg>
+        </div>
+        <div class="message-content">
+          <div class="message-text">
+            <strong>Hello! I'm your ERP AI assistant.</strong><br><br>
+            Ask me anything about your business data — employees, sales orders, inventory, financials, leads, and more.
+            I'll translate your question into SQL, fetch the data, and explain it in plain English.<br><br>
+            <em>Try one of the sample questions on the left, or type your own.</em>
+          </div>
+          <div class="message-time">Now</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INPUT AREA -->
+    <div class="input-area">
+      <div class="input-wrapper">
+        <textarea
+          id="questionInput"
+          class="question-input"
+          placeholder="Ask anything about your ERP data... (Press Enter to send, Shift+Enter for new line)"
+          rows="1"
+        ></textarea>
+        <button class="send-btn" id="sendBtn" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-meta">
+        <span>ERP database · 18 tables · PostgreSQL</span>
+        <span id="charCount">0 / 500</span>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ===== SQL PANEL (slides in from bottom) ===== -->
+<div class="sql-panel" id="sqlPanel">
+  <div class="sql-panel-header">
+    <div class="sql-panel-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+      </svg>
+      Generated SQL
+    </div>
+    <div class="sql-panel-actions">
+      <span class="sql-rows-badge" id="sqlRowsBadge">0 rows</span>
+      <button class="sql-copy-btn" id="sqlCopyBtn">Copy</button>
+      <button class="sql-close-btn" id="sqlCloseBtn">×</button>
+    </div>
+  </div>
+  <pre class="sql-code" id="sqlCode"></pre>
+</div>
+
+<!-- ===== SCHEMA MODAL ===== -->
+<div class="modal-overlay" id="schemaModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Database Schema</h2>
+      <button class="modal-close" id="schemaClose">×</button>
+    </div>
+    <div class="modal-body" id="schemaBody">Loading schema...</div>
+  </div>
+</div>
+
+<!-- ===== DATA TABLE MODAL ===== -->
+<div class="modal-overlay" id="tableModal">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h2 id="tableModalTitle">Query Results</h2>
+      <button class="modal-close" id="tableClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="data-table-wrapper" id="dataTableWrapper"></div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
