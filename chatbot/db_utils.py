@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 # Load .env IMMEDIATELY at import time — must happen before any os.getenv() call
 load_dotenv(override=True)
 
-
+# ---------------------------------------------------------------------------
 # Connection pool (min 1, max 10 connections for scalability)
-
+# ---------------------------------------------------------------------------
 _pool = None
 
 
@@ -21,11 +21,10 @@ def get_pool() -> pool.ThreadedConnectionPool:
     if _pool is None:
         db_host = os.getenv("DB_HOST", "localhost")
         db_port = int(os.getenv("DB_PORT", 5432))
-        db_name = os.getenv("DB_NAME", "erpdb")
+        db_name = os.getenv("DB_NAME", "erp_db")
         db_user = os.getenv("DB_USER", "postgres")
         db_pass = os.getenv("DB_PASSWORD", "")
 
-        # Debug — remove after confirming it works
         print(f"[DB] Connecting to {db_user}@{db_host}:{db_port}/{db_name}  password_set={'yes' if db_pass else 'NO - CHECK .env'}")
 
         _pool = pool.ThreadedConnectionPool(
@@ -36,20 +35,12 @@ def get_pool() -> pool.ThreadedConnectionPool:
             dbname=db_name,
             user=db_user,
             password=db_pass,
+            options="-c search_path=public",
         )
     return _pool
 
 
 def execute_query(sql: str, params=None) -> dict:
-    """
-    Execute a SQL query and return:
-      {
-        "columns": [...],
-        "rows":    [...],          # list of dicts
-        "rowcount": int,
-        "error":   str | None
-      }
-    """
     conn = None
     result = {"columns": [], "rows": [], "rowcount": 0, "error": None}
     try:
@@ -74,11 +65,27 @@ def execute_query(sql: str, params=None) -> dict:
     return result
 
 
+def verify_tables() -> dict:
+    """Check which ERP tables actually exist — call on startup to diagnose missing schema."""
+    expected = [
+        "departments", "employees", "attendance", "leave_requests", "payroll",
+        "warehouses", "product_categories", "products", "stock_movements",
+        "customers", "sales_orders", "sales_order_items", "invoices", "invoice_items",
+        "suppliers", "purchase_orders", "purchase_order_items",
+        "accounts", "journal_entries", "journal_lines", "crm_leads"
+    ]
+    result = execute_query(
+        "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename"
+    )
+    if result["error"]:
+        return {"ok": False, "error": result["error"], "missing": expected}
+
+    found = {r["tablename"] for r in result["rows"]}
+    missing = [t for t in expected if t not in found]
+    return {"ok": len(missing) == 0, "found": sorted(found), "missing": missing}
+
+
 def get_schema_description() -> str:
-    """
-    Build a concise schema description so the LLM understands the database.
-    This is injected into the system prompt.
-    """
     schema = """
 You are connected to an ERP PostgreSQL database. Here is the full schema:
 

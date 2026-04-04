@@ -1,5 +1,6 @@
 /* ============================================================
-   ERP Intelligence — Frontend JS
+   ERP Intelligence v2 — Frontend JS
+   New: reference ground-truth table, enrichment note, scrape badge
    ============================================================ */
 
 const chatMessages    = document.getElementById('chatMessages');
@@ -29,9 +30,7 @@ let totalRows  = 0;
 let currentSQL = '';
 let isLoading  = false;
 
-// ============================================================
-// Health check on load
-// ============================================================
+// ── Health check ──────────────────────────────────────────────
 async function checkHealth() {
   try {
     const res  = await fetch('/api/health');
@@ -48,8 +47,7 @@ async function checkHealth() {
 }
 checkHealth();
 
-// Auto-resize textarea
-
+// ── Textarea auto-resize ───────────────────────────────────────
 questionInput.addEventListener('input', () => {
   questionInput.style.height = 'auto';
   questionInput.style.height = Math.min(questionInput.scrollHeight, 120) + 'px';
@@ -58,21 +56,15 @@ questionInput.addEventListener('input', () => {
   sendBtn.disabled = len === 0 || len > 500 || isLoading;
 });
 
-
-// Enter key handling
-
 questionInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     if (!sendBtn.disabled) sendMessage();
   }
 });
-
 sendBtn.addEventListener('click', sendMessage);
 
-
-// Sample questions
-
+// ── Sample questions ──────────────────────────────────────────
 document.querySelectorAll('.sample-q').forEach(btn => {
   btn.addEventListener('click', () => {
     questionInput.value = btn.dataset.question;
@@ -81,24 +73,17 @@ document.querySelectorAll('.sample-q').forEach(btn => {
   });
 });
 
-
-// Clear chat
-
+// ── Clear chat ────────────────────────────────────────────────
 clearBtn.addEventListener('click', async () => {
   await fetch('/api/clear', { method: 'POST' });
-  // Remove all messages except welcome
-  const msgs = chatMessages.querySelectorAll('.message:not(.welcome-message)');
-  msgs.forEach(m => m.remove());
-  queryCount = 0;
-  totalRows  = 0;
+  document.querySelectorAll('.message:not(.welcome-message)').forEach(m => m.remove());
+  queryCount = 0; totalRows = 0;
   statQueries.textContent = '0';
   statRows.textContent    = '0';
   sqlPanel.classList.remove('visible');
 });
 
-
-// Schema modal
-
+// ── Schema modal ──────────────────────────────────────────────
 schemaBtn.addEventListener('click', async () => {
   schemaModal.classList.add('visible');
   if (schemaBody.textContent === 'Loading schema...') {
@@ -108,22 +93,16 @@ schemaBtn.addEventListener('click', async () => {
   }
 });
 schemaClose.addEventListener('click', () => schemaModal.classList.remove('visible'));
-schemaModal.addEventListener('click', (e) => {
-  if (e.target === schemaModal) schemaModal.classList.remove('visible');
-});
+schemaModal.addEventListener('click', e => { if (e.target === schemaModal) schemaModal.classList.remove('visible'); });
 
-
-// SQL panel
-
+// ── SQL panel ─────────────────────────────────────────────────
 sqlCloseBtn.addEventListener('click', () => sqlPanel.classList.remove('visible'));
-
 sqlCopyBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(currentSQL).then(() => {
     sqlCopyBtn.textContent = 'Copied!';
     setTimeout(() => { sqlCopyBtn.textContent = 'Copy'; }, 1500);
   });
 });
-
 function showSqlPanel(sql, rowcount) {
   currentSQL = sql;
   sqlCode.textContent = sql;
@@ -131,64 +110,39 @@ function showSqlPanel(sql, rowcount) {
   sqlPanel.classList.add('visible');
 }
 
-
-// Data table modal
-
+// ── Data table modal ──────────────────────────────────────────
 tableClose.addEventListener('click', () => tableModal.classList.remove('visible'));
-tableModal.addEventListener('click', (e) => {
-  if (e.target === tableModal) tableModal.classList.remove('visible');
-});
+tableModal.addEventListener('click', e => { if (e.target === tableModal) tableModal.classList.remove('visible'); });
 
-function showDataTable(columns, rows, rowcount) {
-  tableModalTitle.textContent = `Query Results — ${rowcount} row${rowcount !== 1 ? 's' : ''}`;
+function buildDataTable(columns, rows, rowcount) {
+  if (!columns.length) return '<p style="color:var(--text-2)">No data returned.</p>';
 
-  if (!columns.length) {
-    dataTableWrapper.innerHTML = '<p style="color:var(--text-2)">No data returned.</p>';
-  } else {
-    const table = document.createElement('table');
-    table.className = 'data-table';
-
-    // Header
-    const thead = document.createElement('thead');
-    const trh   = document.createElement('tr');
+  let html = '<table class="data-table"><thead><tr>';
+  columns.forEach(col => { html += `<th>${escapeHtml(col)}</th>`; });
+  html += '</tr></thead><tbody>';
+  rows.forEach(row => {
+    html += '<tr>';
     columns.forEach(col => {
-      const th = document.createElement('th');
-      th.textContent = col;
-      trh.appendChild(th);
+      const val = row[col];
+      const display = val === null ? '—' : String(val);
+      html += `<td title="${escapeHtml(display)}">${escapeHtml(display)}</td>`;
     });
-    thead.appendChild(trh);
-    table.appendChild(thead);
-
-    // Body
-    const tbody = document.createElement('tbody');
-    rows.forEach(row => {
-      const tr = document.createElement('tr');
-      columns.forEach(col => {
-        const td = document.createElement('td');
-        const val = row[col];
-        td.textContent = val === null ? '—' : String(val);
-        td.title = val === null ? '' : String(val);
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    dataTableWrapper.innerHTML = '';
-    dataTableWrapper.appendChild(table);
-
-    if (rowcount > rows.length) {
-      const note = document.createElement('p');
-      note.className = 'table-note';
-      note.textContent = `Showing first ${rows.length} of ${rowcount} rows.`;
-      dataTableWrapper.appendChild(note);
-    }
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  if (rowcount > rows.length) {
+    html += `<p class="table-note">Showing first ${rows.length} of ${rowcount} rows.</p>`;
   }
+  return html;
+}
+
+function showDataTable(columns, rows, rowcount, title = 'Query Results') {
+  tableModalTitle.textContent = `${title} — ${rowcount} row${rowcount !== 1 ? 's' : ''}`;
+  dataTableWrapper.innerHTML  = buildDataTable(columns, rows, rowcount);
   tableModal.classList.add('visible');
 }
 
-
-// Append message helpers
-
+// ── Message helpers ───────────────────────────────────────────
 function appendUserMessage(text) {
   const div = document.createElement('div');
   div.className = 'message user-message';
@@ -207,9 +161,7 @@ function appendLoadingMessage() {
   div.className = 'message bot-message loading-msg';
   div.innerHTML = `
     <div class="message-avatar bot-avatar">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="12" r="10"/>
-      </svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
     </div>
     <div class="message-content">
       <div class="message-text">
@@ -227,26 +179,29 @@ function appendBotMessage(data) {
   div.className = 'message bot-message';
 
   const hasError   = !!data.error;
+  const hasRef     = data.reference_cols && data.reference_cols.length > 0;
   const hasResults = data.columns && data.columns.length > 0;
 
+  // Enrichment badge
+  let enrichHtml = '';
+  if (data.enrich_note) {
+    const isSuccess = data.enrich_note.startsWith('🔍');
+    enrichHtml = `<div class="enrich-badge ${isSuccess ? 'enrich-success' : 'enrich-warn'}">${escapeHtml(data.enrich_note)}</div>`;
+  }
+
+  // Action buttons
   let actionsHtml = '';
   if (data.sql) {
-    actionsHtml += `
-      <button class="msg-action-btn show-sql-btn">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-        </svg>
-        View SQL
-      </button>`;
+    actionsHtml += `<button class="msg-action-btn show-sql-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+      </svg>View SQL</button>`;
   }
   if (hasResults) {
-    actionsHtml += `
-      <button class="msg-action-btn show-table-btn">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-        </svg>
-        View Table (${data.rowcount} rows)
-      </button>`;
+    actionsHtml += `<button class="msg-action-btn show-table-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+      </svg>View Table (${data.rowcount} rows)</button>`;
   }
 
   div.innerHTML = `
@@ -256,34 +211,70 @@ function appendBotMessage(data) {
       </svg>
     </div>
     <div class="message-content">
-      ${hasError ? `<div class="error-badge">⚠ Query had an issue</div>` : ''}
+      ${hasError  ? `<div class="error-badge">⚠ Query had an issue</div>` : ''}
+      ${enrichHtml}
       <div class="message-text">${formatAnswer(data.answer)}</div>
       ${actionsHtml ? `<div class="message-actions">${actionsHtml}</div>` : ''}
+      ${hasRef ? buildInlineRefTable(data.reference_cols, data.reference_rows) : ''}
       <div class="message-time">${now()}</div>
     </div>`;
 
   chatMessages.appendChild(div);
 
-  // Wire up buttons
-  const sqlBtn   = div.querySelector('.show-sql-btn');
-  const tableBtn = div.querySelector('.show-table-btn');
-  if (sqlBtn)   sqlBtn.addEventListener('click',   () => showSqlPanel(data.sql, data.rowcount));
-  if (tableBtn) tableBtn.addEventListener('click', () => showDataTable(data.columns, data.rows, data.rowcount));
+  div.querySelector('.show-sql-btn')  ?.addEventListener('click', () => showSqlPanel(data.sql, data.rowcount));
+  div.querySelector('.show-table-btn')?.addEventListener('click', () => showDataTable(data.columns, data.rows, data.rowcount));
 
   scrollBottom();
 }
 
+// ── Inline reference table (ground truth) ────────────────────
+function buildInlineRefTable(cols, rows) {
+  if (!cols.length || !rows.length) return '';
 
-// Main send function
+  // Decide which columns to show inline (max 6 most useful)
+  const priority = ['name','product_name','sku','erp_unit_price','market_price_avg',
+                    'market_price_min','market_price_max','availability','market_availability',
+                    'qty_in_stock','category','status','total_amount','customer_name',
+                    'first_name','last_name','salary','department'];
+  let displayCols = cols.filter(c => priority.includes(c));
+  if (displayCols.length === 0) displayCols = cols.slice(0, 6);
+  else if (displayCols.length > 7) displayCols = displayCols.slice(0, 7);
 
+  let html = `
+    <div class="ref-table-wrap">
+      <div class="ref-table-header">
+        <span>📋 Ground Truth — Reference Records</span>
+        <span class="ref-count">${rows.length} record${rows.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="ref-table-scroll">
+        <table class="ref-table">
+          <thead><tr>`;
+  displayCols.forEach(c => { html += `<th>${escapeHtml(c.replace(/_/g,' '))}</th>`; });
+  html += '</tr></thead><tbody>';
+  rows.forEach(row => {
+    html += '<tr>';
+    displayCols.forEach(c => {
+      let val = row[c];
+      if (val === null || val === undefined) val = '—';
+      // Format prices nicely
+      if (typeof val === 'number' && (c.includes('price') || c.includes('salary') || c.includes('amount'))) {
+        val = '₹' + Number(val).toLocaleString('en-IN');
+      }
+      html += `<td>${escapeHtml(String(val))}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+// ── Main send ─────────────────────────────────────────────────
 async function sendMessage() {
   const question = questionInput.value.trim();
   if (!question || isLoading) return;
 
   isLoading = true;
   sendBtn.disabled = true;
-
-  // Reset input
   questionInput.value = '';
   questionInput.style.height = 'auto';
   charCount.textContent = '0 / 500';
@@ -291,33 +282,44 @@ async function sendMessage() {
   appendUserMessage(question);
   const loadingEl = appendLoadingMessage();
 
+  // Update loading text if scraping might happen
+  const scrapeKeywords = ['price','market','stock','inventory','product','buy','cost','availability'];
+  if (scrapeKeywords.some(k => question.toLowerCase().includes(k))) {
+    setTimeout(() => {
+      const label = loadingEl.querySelector('.loading-label');
+      if (label) label.textContent = 'Checking market data...';
+    }, 2000);
+    setTimeout(() => {
+      const label = loadingEl.querySelector('.loading-label');
+      if (label) label.textContent = 'Generating answer...';
+    }, 5000);
+  }
+
   try {
     const res  = await fetch('/api/chat', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
+      body:    JSON.stringify({ question }),
     });
     const data = await res.json();
 
     loadingEl.remove();
     appendBotMessage(data);
 
-    // Update stats
     queryCount++;
     totalRows += data.rowcount || 0;
     statQueries.textContent = queryCount;
     statRows.textContent    = totalRows.toLocaleString('en-IN');
 
-    // Auto-show SQL panel for valid queries
     if (data.sql && data.sql !== 'CANNOT_ANSWER' && !data.error) {
       showSqlPanel(data.sql, data.rowcount);
     }
-
   } catch (err) {
     loadingEl.remove();
     appendBotMessage({
       answer: 'Network error. Please check your connection and try again.',
       sql: '', rowcount: 0, columns: [], rows: [],
+      reference_cols: [], reference_rows: [], enrich_note: '',
       error: err.message,
     });
   } finally {
@@ -327,26 +329,19 @@ async function sendMessage() {
   }
 }
 
-
-// Utilities
-
+// ── Utilities ─────────────────────────────────────────────────
 function scrollBottom() {
-  requestAnimationFrame(() => {
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  });
+  requestAnimationFrame(() => { chatMessages.scrollTop = chatMessages.scrollHeight; });
 }
-
 function now() {
   return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
-
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-            .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-
 function formatAnswer(text) {
-  // Convert newlines to <br>, bold **text**, and keep it clean
   return escapeHtml(text)
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br>');
